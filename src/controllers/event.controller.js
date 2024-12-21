@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from "uuid";
 import { Event } from "../models/events.model.js";
-import { Mutex } from "async-mutex";
+import { redlock } from "../utility/redis.js";
+
 export const createEvent = async (req, res) => {
   const { eventName, ticketNumbers, eventDate } = req.body;
   console.log("Inside create event");
@@ -49,9 +50,11 @@ export const bookTicketForEvent = async (req, res) => {
       .status(400)
       .json({ status: false, message: "Required fields missing." });
   }
-  const mutex = new Mutex();
-  const release = await mutex.acquire();
+  let lock;
+
   try {
+    lock = await redlock.acquire([ticketId], 5000);
+
     const event = await Event.findOne({ eventId });
 
     const ticket = event.tickets.find((t) => {
@@ -80,9 +83,13 @@ export const bookTicketForEvent = async (req, res) => {
       message: "Ticket booked successfully.",
     });
   } catch (err) {
-    console.log(JSON.stringify(err));
+    console.log(err);
     res.status(500).json({ status: false, message: "An error occurred." });
   } finally {
-    release();
+    if (lock) {
+      await lock.release().catch((err) => {
+        console.log(`Error releasing lock: ${err} for ticketid: ${ticketId}`);
+      });
+    }
   }
 };
