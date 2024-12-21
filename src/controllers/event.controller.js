@@ -56,6 +56,12 @@ export const bookTicketForEvent = async (req, res) => {
     lock = await redlock.acquire([ticketId], 5000);
 
     const event = await Event.findOne({ eventId });
+    if (!event) {
+      return res.status(404).json({
+        status: false,
+        message: "Event not found.",
+      });
+    }
 
     const ticket = event.tickets.find((t) => {
       return t.ticketId === ticketId;
